@@ -1,11 +1,13 @@
 import numbers
 from typing import Union
 
+import numpy as np
+
 from river.base import DriftAndWarningDetector, DriftDetector
 
-from .abcd_supplementary.feature_extraction import *
-from .abcd_supplementary.windowing import *
-from .abcd_supplementary.util import handles_dicts
+from abcd_supplementary.feature_extraction import *
+from abcd_supplementary.windowing import *
+from abcd_supplementary.util import handles_dicts, convert_to_univariate_if_possible
 
 
 class ABCD(DriftAndWarningDetector):
@@ -46,10 +48,10 @@ class ABCD(DriftAndWarningDetector):
         self._warning_detected = False
         self._seen_elements = 0
         self._last_loss = np.nan
-        self.drift_dimensions = None
         self._epochs = update_epochs
         self._eta = encoding_factor
-        self._severity = np.nan
+        self.severity = np.nan
+        self.drift_dimensions = None
         self.model_id = model_id
         self._dict_keys: Union[np.ndarray, None] = None
         self.model: Union[EncoderDecoder, None] = None
@@ -81,19 +83,22 @@ class ABCD(DriftAndWarningDetector):
         self._pretrained = False
 
     @handles_dicts
+    @convert_to_univariate_if_possible
     def update(self, x: Union[numbers.Number, np.ndarray, dict]) -> DriftDetector:
         self._seen_elements += 1
+        self._reset_flags()
         if isinstance(x, numbers.Number):  # handle univariate data
-            x_arr = np.array([x])
-            new_tuple = (x, x_arr, x_arr)  # we want to find changes in x
+            new_tuple = (x, np.array([0]), np.array([x]))  # we want to find changes in x
         else:  # handle multivariate data
             if self.model is None:
                 self._new_model(x.shape[-1])
             if not self._pretrained:
                 self._pretrain_buffer.append(x)
                 if len(self._pretrain_buffer) >= self._min_instances_pretrain:
-                    self._pre_train(np.array(self._pretrain_buffer))
+                    self._pre_train(np.array(self._pretrain_buffer, ndmin=2))
                 return self
+            if len(x.shape) == 1:
+                x = np.expand_dims(x, axis=0)
             new_tuple = self.model.new_tuple(x)
 
         # append reconstruction / univariate data point to window
@@ -160,5 +165,11 @@ class ABCD(DriftAndWarningDetector):
         mse_post = np.mean(se_post, axis=-1)
         mean_pre, std_pre = np.mean(mse_pre), np.std(mse_pre)
         mean_post = np.mean(mse_post)
+        if std_pre == 0:
+            std_pre = 1e-10
         z_score_normalized = np.abs(mean_post - mean_pre) / std_pre
-        self._severity = float(z_score_normalized)
+        self.severity = float(z_score_normalized)
+
+    def _reset_flags(self):
+        self._drift_detected = False
+        self._warning_detected = False

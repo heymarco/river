@@ -81,7 +81,6 @@ class AutoEncoder(nn.Module, EncoderDecoder):
         with torch.no_grad():
             pred = self.forward(tensor)
             loss = F.mse_loss(pred, tensor)
-            logger.track_feature_extraction(loss.item())
             return loss.item(), pred.numpy()[0], x[0]
 
 

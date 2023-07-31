@@ -325,7 +325,7 @@ def random_subspace(all_features: list, k: int, rng: random.Random):
     return rng.sample(all_features, k=k)
 
 
-class SRPABCDClassifier(BaseSRPEnsemble, base.Classifier):
+class SRPABCDClassifier(BaseSRPEnsembleABCD, base.Classifier):
     """Streaming Random Patches ensemble classifier.
 
     The Streaming Random Patches (SRP) [^1] is an ensemble method that
@@ -582,7 +582,7 @@ class BaseSRPClassifier(BaseSRPEstimator):
         return None  # type: ignore
 
 
-class SRPABCDRegressor(BaseSRPEnsemble, base.Regressor):
+class SRPABCDRegressor(BaseSRPEnsembleABCD, base.Regressor):
     """Streaming Random Patches ensemble regressor.
 
     The Streaming Random Patches [^1] ensemble method for regression trains

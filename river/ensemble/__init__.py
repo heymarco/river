@@ -18,6 +18,7 @@ from .boosting import AdaBoostClassifier, ADWINBoostingClassifier, BOLEClassifie
 from .ewa import EWARegressor
 from .stacking import StackingClassifier
 from .streaming_random_patches import SRPClassifier, SRPRegressor
+from .streaming_random_patches_abcd import SRPABCDClassifier, SRPABCDRegressor
 from .voting import VotingClassifier
 
 __all__ = [
@@ -31,6 +32,8 @@ __all__ = [
     "LeveragingBaggingClassifier",
     "SRPClassifier",
     "SRPRegressor",
+    "SRPABCDClassifier",
+    "SRPABCDRegressor",
     "StackingClassifier",
     "VotingClassifier",
 ]

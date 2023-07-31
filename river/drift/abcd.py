@@ -14,25 +14,48 @@ class ABCD(DriftAndWarningDetector):
     def __init__(self,
                  delta: float = 0.01,
                  delta_warning: float = 0.1,
-                 model_id: EncoderDecoderType = EncoderDecoderType.AE,
+                 model_type: EncoderDecoderType = EncoderDecoderType.AE,
                  encoding_factor: float = 0.5,
                  update_epochs: int = 50,
-                 num_splits: int = 20,
                  min_instances_pretrain: int = 100,
                  split_type: SplitType = SplitType.Equidistant,
+                 num_splits: int = 20,
                  max_size: int = np.infty,
-                 subspace_threshold: float = 2.5,
+                 tau: float = 2.5,
                  custom_encoder_decoder: Union[EncoderDecoder, None] = None,
-                 bonferroni: bool = False):
+                 bonferroni: bool = False,
+                 seed: int = 0):
         """
-        :param delta: The desired confidence level
-        :param model_id: The name of the model to use
-        :param update_epochs: The number of _epochs to train the AE after a change occurred
-        :param split_type: Investigation of different split types
-        :param subspace_threshold: Called tau in the paper
-        :param bonferroni: Use _bonferroni correction to account for multiple testing?
-        :param encoding_factor: The relative size of the bottleneck
-        :param num_splits: The number of time point to evaluate
+        Adaptive Bernstein change detector for high-dimensional data streams (ABCD).
+        ABCD combines an encoder-decoder model, Bernstein’s inequality, and adaptive windowing to detect changes.
+        Parameters
+        ----------
+        delta : float
+            The p-value threshold for detecting changes
+        delta_warning : float
+            The p-value threshold for detecting a warning
+        model_type : EncoderDecoderType
+            The type of model used (supports PCA, Kernel PCA, Autoencoder, and custom models)
+        encoding_factor : float
+            The relative size of the bottleneck. Gets passed to the encoder decoder model.
+        update_epochs : int
+            The number of epochs to train the autoencoder
+        min_instances_pretrain : int
+            The minimum number of instances required before retraining happens
+        split_type : SplitType
+            The type of split to use (supports 'all' and 'equidistant')
+        num_splits : int
+            The number of window splits that get evaluated when a new instance arrives
+        max_size : int
+            The maximum size of the adaptive windows
+        tau : float
+            The threshold for change subspace detection
+        custom_encoder_decoder : EncoderDecoder
+            The custom encoder-decoder class (uninitialized)
+        bonferroni : bool
+            Whether to use Bonferroni correction when computing the p-value
+        seed : int
+            The random seed used during random number generation (e.g., when initializing the weights of the autoencoder)
         """
         self._split_type = split_type
         self._delta = delta
@@ -40,10 +63,13 @@ class ABCD(DriftAndWarningDetector):
         self._bonferroni = bonferroni
         self._num_splits = num_splits
         self._max_size = max_size
-        self._subspace_threshold = subspace_threshold
-        self._window = AdaptiveWindow(delta=delta, delta_warning=delta_warning,
-                                      split_type=split_type, max_size=max_size,
-                                      bonferroni=bonferroni, n_splits=num_splits)
+        self.tau = tau
+        self._window = AdaptiveWindow(delta=delta,
+                                      delta_warning=delta_warning,
+                                      split_type=split_type,
+                                      max_size=max_size,
+                                      bonferroni=bonferroni,
+                                      n_splits=num_splits)
         self._drift_detected = False
         self._warning_detected = False
         self._seen_elements = 0
@@ -52,20 +78,21 @@ class ABCD(DriftAndWarningDetector):
         self._eta = encoding_factor
         self.severity = np.nan
         self.drift_dimensions = None
-        self.model_id = model_id
+        self.model_type = model_type
         self._dict_keys: Union[np.ndarray, None] = None
         self.model: Union[EncoderDecoder, None] = None
         self._model_class: Union[callable, None] = None
         self._min_instances_pretrain = min_instances_pretrain
         self._pretrain_buffer = []
         self._pretrained = False
-        if model_id == EncoderDecoderType.PCA:
+        if model_type == EncoderDecoderType.PCA:
             self._model_class = PCAModel
-        elif model_id == EncoderDecoderType.KernelPCA:
+        elif model_type == EncoderDecoderType.KernelPCA:
             self._model_class = KernelPCAModel
-        elif model_id == EncoderDecoderType.AE:
+        elif model_type == EncoderDecoderType.AE:
+            torch.manual_seed(seed)
             self._model_class = AutoEncoder
-        elif model_id == EncoderDecoderType.Custom:
+        elif model_type == EncoderDecoderType.Custom:
             assert custom_encoder_decoder is not None;
             "If using EncoderDecoderType.Custom you must provide a valid EncoderDecoder class"
             self._model_class = custom_encoder_decoder
@@ -124,7 +151,7 @@ class ABCD(DriftAndWarningDetector):
 
     def get_drift_dims(self) -> np.ndarray:
         drift_dims = np.array([
-            i for i in range(len(self.drift_dimensions)) if self.drift_dimensions[i] < self._subspace_threshold
+            i for i in range(len(self.drift_dimensions)) if self.drift_dimensions[i] < self.tau
         ])
         return np.arange(len(self.drift_dimensions)) if len(drift_dims) == 0 else drift_dims
 

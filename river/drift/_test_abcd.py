@@ -1,6 +1,6 @@
 import numpy as np
 
-from abcd import ABCD
+from river.drift.abcd import ABCD
 
 
 if __name__ == '__main__':

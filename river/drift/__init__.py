@@ -14,6 +14,7 @@ from .dummy import DummyDriftDetector
 from .kswin import KSWIN
 from .page_hinkley import PageHinkley
 from .retrain import DriftRetrainingClassifier
+from .abcd import ABCD
 
 __all__ = [
     "binary",
@@ -22,5 +23,6 @@ __all__ = [
     "DummyDriftDetector",
     "KSWIN",
     "PageHinkley",
+    "ABCD",
     "PeriodicTrigger",
 ]

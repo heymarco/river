@@ -5,9 +5,9 @@ import numpy as np
 
 from river.base import DriftAndWarningDetector, DriftDetector
 
-from abcd_supplementary.feature_extraction import *
-from abcd_supplementary.windowing import *
-from abcd_supplementary.util import handles_dicts, convert_to_univariate_if_possible
+from .abcd_supplementary.feature_extraction import *
+from .abcd_supplementary.windowing import *
+from .abcd_supplementary.util import handles_dicts, convert_to_univariate_if_possible
 
 
 class ABCD(DriftAndWarningDetector):

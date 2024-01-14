@@ -843,8 +843,11 @@ class BaseSRPRegressor(BaseSRPEstimator):
             x_subset = x
 
         # TODO Find a way to verify if the model natively supports sample_weight
-        for _ in range(int(sample_weight)):
-            self.model.learn_one(x=x_subset, y=y, **kwargs)
+        try:
+            self.model.learn_one(x=x_subset, y=y, w=sample_weight, **kwargs)
+        except:
+            for _ in range(int(sample_weight)):
+                self.model.learn_one(x=x_subset, y=y, **kwargs)
 
         # Drift detection input
         y_pred = self.model.predict_one(x_subset)

@@ -60,8 +60,6 @@ class NominalSplitterClassif(Splitter):
                 multiway_split=True,
             )
 
-            return best_suggestion
-
         for att_val in self._att_values:
             post_split_dist = self._class_dist_from_binary_split(att_val)
             merit = criterion.merit_of_split(pre_split_dist, post_split_dist)

@@ -178,10 +178,10 @@ class BaseSRPEnsemble(base.Wrapper, base.Ensemble):
                         random_subspace(all_features=features, k=k, rng=self._rng)
                         for _ in range(self.n_models)
                     ]
-            else:
-                # k == 0 or k > n_features (subspace size is larger than the
-                # number of features), then default to re-sampling
-                self.training_method = self._TRAIN_RESAMPLING
+            # else:
+            #     # k == 0 or k > n_features (subspace size is larger than the
+            #     # number of features), then default to re-sampling
+            #     self.training_method = self._TRAIN_RESAMPLING
 
     def _init_ensemble(self, features: list):
         self._generate_subspaces(features=features)
@@ -544,8 +544,11 @@ class BaseSRPClassifier(BaseSRPEstimator):
             x_subset = x
 
         # TODO Find a way to verify if the model natively supports sample_weight
-        for _ in range(int(sample_weight)):
-            self.model.learn_one(x=x_subset, y=y, **kwargs)
+        try:
+            self.model.learn_one(x=x_subset, y=y, w=sample_weight, **kwargs)
+        except:
+            for _ in range(int(sample_weight)):
+                self.model.learn_one(x=x_subset, y=y, **kwargs)
 
         if self._background_learner:
             # Train the background learner

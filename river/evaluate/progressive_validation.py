@@ -19,6 +19,7 @@ def _progressive_validation(
     delay: str | int | dt.timedelta | typing.Callable | None = None,
     measure_time=False,
     measure_memory=False,
+    timeout: int | None = None
 ):
     # Check that the model and the metric are in accordance
     if not metric.works_with(model):
@@ -60,6 +61,8 @@ def _progressive_validation(
             state["Memory"] = model._raw_memory_usage
         return state
 
+    start_time = time.process_time()
+
     for i, x, y, *kwargs in stream.simulate_qa(dataset, moment, delay, copy=True):
         kwargs = kwargs[0] if kwargs else {}
 
@@ -93,6 +96,14 @@ def _progressive_validation(
             yield report()
             prev_checkpoint = next_checkpoint
             next_checkpoint = next(checkpoints, None)
+
+        if timeout:
+            current_time = time.process_time()
+            if current_time - start_time > timeout:
+                # If the dataset was exhausted, we need to make sure that we yield the final results
+                if prev_checkpoint and n_total_answers != prev_checkpoint:
+                    yield report()
+                    break
     else:
         # If the dataset was exhausted, we need to make sure that we yield the final results
         if prev_checkpoint and n_total_answers != prev_checkpoint:
@@ -108,6 +119,7 @@ def iter_progressive_val_score(
     step=1,
     measure_time=False,
     measure_memory=False,
+    timeout: int | None = None
 ) -> typing.Generator:
     """Evaluates the performance of a model on a streaming dataset and yields results.
 
@@ -143,6 +155,8 @@ def iter_progressive_val_score(
         Whether or not to measure the elapsed time.
     measure_memory
         Whether or not to measure the memory usage of the model.
+    timeout
+        Maximum process time before report is yielded and execution terminates
 
     Examples
     --------
@@ -196,6 +210,7 @@ def iter_progressive_val_score(
         delay=delay,
         measure_time=measure_time,
         measure_memory=measure_memory,
+        timeout=timeout
     )
 
 
@@ -208,6 +223,7 @@ def progressive_val_score(
     print_every=0,
     show_time=False,
     show_memory=False,
+    timeout: int | None = None,
     **print_kwargs,
 ) -> metrics.base.Metric:
     """Evaluates the performance of a model on a streaming dataset.
@@ -361,6 +377,7 @@ def progressive_val_score(
         step=print_every,
         measure_time=show_time,
         measure_memory=show_memory,
+        timeout=timeout
     )
 
     active_learning = utils.inspect.isactivelearner(model)

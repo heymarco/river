@@ -8,7 +8,6 @@ purposes. The properties are not meant to be modified by the user.
 from __future__ import annotations
 
 import abc
-import numbers
 
 from . import base
 
@@ -58,17 +57,13 @@ class DriftDetector(_BaseDriftDetector):
     """A drift detector."""
 
     @abc.abstractmethod
-    def update(self, x: numbers.Number) -> DriftDetector:
+    def update(self, x: int | float) -> DriftDetector:
         """Update the detector with a single data point.
 
         Parameters
         ----------
         x
             Input value.
-
-        Returns
-        -------
-        self
 
         """
 
@@ -88,10 +83,6 @@ class BinaryDriftDetector(_BaseDriftDetector):
         ----------
         x
             Input boolean.
-
-        Returns
-        -------
-        self
 
         """
 

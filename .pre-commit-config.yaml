@@ -11,17 +11,13 @@ repos:
 
   - repo: local
     hooks:
-      - id: black
-        name: black
-        language: python
-        types: [python]
-        entry: black
-
       - id: ruff
         name: ruff
         language: python
         types: [python]
         entry: ruff
+        args: 
+          - --fix
 
       - id: mypy
         name: mypy

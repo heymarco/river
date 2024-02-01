@@ -18,9 +18,20 @@ from .utils import BranchFactory
 
 
 class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
-    """Extremely Fast Decision Tree classifier.
+    """Extremely Fast Decision Tree (EFDT) classifier.
 
-    Also referred to as Hoeffding AnyTime Tree (HATT) classifier.
+    Also referred to as the Hoeffding AnyTime Tree (HATT) classifier. In practice,
+    despite the name, EFDTs are typically slower than a vanilla Hoeffding Tree
+    to process data. The speed differences come from the mechanism of split
+    re-evaluation present in EFDT. Nonetheless, EFDT has theoretical properties
+    that ensure it converges faster than the vanilla Hoeffding Tree to the structure
+    that would be created by a batch decision tree model (such as Classification and
+    Regression Trees - CART). Keep in mind that such propositions hold when processing
+    a stationary data stream. When dealing with non-stationary data, EFDT is somewhat
+    robust to concept drifts as it continually revisits and updates its internal
+    decision tree structure. Still, in such cases, the Hoeffind Adaptive Tree might
+    be a better option, as it was specifically designed to handle non-stationarity.
+
 
     Parameters
     ----------
@@ -193,7 +204,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
             else:
                 return EFDTNominalMultiwayBranch
 
-    def learn_one(self, x, y, *, sample_weight=1.0):
+    def learn_one(self, x, y, *, w=1.0):
         """Incrementally train the model
 
         Parameters
@@ -202,7 +213,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
             Instance attributes.
         y
             The label of the instance.
-        sample_weight
+        w
             The weight of the sample.
 
         Notes
@@ -215,28 +226,22 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
         * Reevaluate the best split for each internal node.
         * Attempt to split the leaf.
 
-        Returns
-        -------
-        self
-
         """
         # Updates the set of observed classes
         self.classes.add(y)
 
-        self._train_weight_seen_by_model += sample_weight
+        self._train_weight_seen_by_model += w
 
         if self._root is None:
             self._root = self._new_leaf()
             self._n_active_leaves = 1
 
         # Sort instance X into a leaf
-        self._sort_to_leaf(x, y, sample_weight)
+        self._sort_to_leaf(x, y, w)
         # Process all nodes, starting from root to the leaf where the instance x belongs.
-        self._process_nodes(x, y, sample_weight, self._root, None, None)
+        self._process_nodes(x, y, w, self._root, None, None)
 
-        return self
-
-    def _sort_to_leaf(self, x, y, sample_weight):
+    def _sort_to_leaf(self, x, y, w):
         """For a given instance, find the corresponding leaf and update it.
 
         Private function where leaf learn from instance.
@@ -251,7 +256,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
             Instance attributes.
         y
             The instance label.
-        sample_weight
+        w
             The weight of the sample.
 
         """
@@ -276,12 +281,12 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
                             node = node.traverse(x, until_leaf=False)
                     if isinstance(node, HTLeaf):
                         break
-        node.learn_one(x, y, sample_weight=sample_weight, tree=self)
+        node.learn_one(x, y, w=w, tree=self)
 
         if self._train_weight_seen_by_model % self.memory_estimate_period == 0:
             self._estimate_model_size()
 
-    def _process_nodes(self, x, y, sample_weight, node, parent, branch_index):
+    def _process_nodes(self, x, y, w, node, parent, branch_index):
         """Process nodes from the root to the leaf where the instance belongs.
 
         1. If the node is internal:
@@ -295,7 +300,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
             Instance attributes.
         y
             The label of the instance.
-        sample_weight
+        w
             The weight of the sample.
         node
             The node to process.
@@ -306,7 +311,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
         """
         if isinstance(node, BaseEFDTBranch):
             # Update split nodes as the tree is traversed
-            node.learn_one(x, y, sample_weight=sample_weight, tree=self)
+            node.learn_one(x, y, w=w, tree=self)
 
             old_weight = node.last_split_reevaluation_at
             new_weight = node.total_weight
@@ -331,7 +336,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
                     child = node.children[child_index]
                 except KeyError:
                     child_index, child = node.most_common_path()
-                self._process_nodes(x, y, sample_weight, child, node, child_index)
+                self._process_nodes(x, y, w, child, node, child_index)
         elif self._growth_allowed and node.is_active():
             if node.depth >= self.max_depth:  # Max depth reached
                 node.deactivate()
@@ -421,7 +426,7 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
 
                     # update EFDT
                     if parent is None:
-                        # Root case : replace the root node by a new split node
+                        # Root case : replace the root node by the new node
                         self._root = best_split
                     else:
                         parent.children[branch_index] = best_split
@@ -440,59 +445,67 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
 
                     # Manage memory
                     self._enforce_size_limit()
+                elif x_current is not None:
+                    if (
+                        x_best.merit - x_current.merit > hoeffding_bound
+                        or hoeffding_bound < self.tau
+                    ) and (id_current != id_best):
+                        # Create a new branch
+                        branch = self._branch_selector(
+                            x_best.numerical_feature, x_best.multiway_split
+                        )
+                        leaves = tuple(
+                            self._new_leaf(initial_stats, parent=node)
+                            for initial_stats in x_best.children_stats
+                        )
 
-                elif (
-                    x_best.merit - x_current.merit > hoeffding_bound or hoeffding_bound < self.tau
-                ) and (id_current != id_best):
-                    # Create a new branch
-                    branch = self._branch_selector(x_best.numerical_feature, x_best.multiway_split)
-                    leaves = tuple(
-                        self._new_leaf(initial_stats, parent=node)
-                        for initial_stats in x_best.children_stats
-                    )
+                        new_split = x_best.assemble(
+                            branch, node.stats, node.depth, *leaves, **kwargs
+                        )
+                        # Update weights in new_split
+                        new_split.last_split_reevaluation_at = node.total_weight
 
-                    new_split = x_best.assemble(branch, node.stats, node.depth, *leaves, **kwargs)
-                    # Update weights in new_split
-                    new_split.last_split_reevaluation_at = node.total_weight
+                        n_active = n_inactive = 0
+                        for leaf in node.iter_leaves():
+                            if leaf.is_active():
+                                n_active += 1
+                            else:
+                                n_inactive += 1
 
-                    n_active = n_inactive = 0
-                    for leaf in node.iter_leaves():
-                        if leaf.is_active():
-                            n_active += 1
+                        self._n_active_leaves -= n_active
+                        self._n_inactive_leaves -= n_inactive
+                        self._n_active_leaves += len(leaves)
+
+                        if parent is None:
+                            # Root case : replace the root node by a new split node
+                            self._root = new_split
                         else:
-                            n_inactive += 1
+                            parent.children[branch_index] = new_split
 
-                    self._n_active_leaves -= n_active
-                    self._n_inactive_leaves -= n_inactive
-                    self._n_active_leaves += len(leaves)
+                        stop_flag = True
 
-                    if parent is None:
-                        # Root case : replace the root node by a new split node
-                        self._root = new_split
-                    else:
-                        parent.children[branch_index] = new_split
+                        # Manage memory
+                        self._enforce_size_limit()
 
-                    stop_flag = True
+                    elif (
+                        x_best.merit - x_current.merit > hoeffding_bound
+                        or hoeffding_bound < self.tau
+                    ) and (id_current == id_best):
+                        branch = self._branch_selector(
+                            x_best.numerical_feature, x_best.multiway_split
+                        )
+                        # Change the branch but keep the existing children nodes
+                        new_split = x_best.assemble(
+                            branch, node.stats, node.depth, *tuple(node.children), **kwargs
+                        )
+                        # Update weights in new_split
+                        new_split.last_split_reevaluation_at = node.total_weight
 
-                    # Manage memory
-                    self._enforce_size_limit()
-
-                elif (
-                    x_best.merit - x_current.merit > hoeffding_bound or hoeffding_bound < self.tau
-                ) and (id_current == id_best):
-                    branch = self._branch_selector(x_best.numerical_feature, x_best.multiway_split)
-                    # Change the branch but keep the existing children nodes
-                    new_split = x_best.assemble(
-                        branch, node.stats, node.depth, *tuple(node.children), **kwargs
-                    )
-                    # Update weights in new_split
-                    new_split.last_split_reevaluation_at = node.total_weight
-
-                    if parent is None:
-                        # Root case : replace the root node by a new split node
-                        self._root = new_split
-                    else:
-                        parent.children[branch_index] = new_split
+                        if parent is None:
+                            # Root case : replace the root node by a new split node
+                            self._root = new_split
+                        else:
+                            parent.children[branch_index] = new_split
 
         return stop_flag
 
@@ -540,7 +553,12 @@ class ExtremelyFastDecisionTreeClassifier(HoeffdingTreeClassifier):
                     node.total_weight,
                 )
 
-                if x_best.merit - x_null.merit > hoeffding_bound or hoeffding_bound < self.tau:
+                if x_best.feature is None:
+                    # Pre-pruning - null wins
+                    node.deactivate()
+                    self._n_inactive_leaves += 1
+                    self._n_active_leaves -= 1
+                elif x_best.merit - x_null.merit > hoeffding_bound or hoeffding_bound < self.tau:
                     # Create a new branch
                     branch = self._branch_selector(x_best.numerical_feature, x_best.multiway_split)
                     leaves = tuple(

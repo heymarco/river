@@ -45,8 +45,8 @@ class BayesUCB(bandit.base.Policy):
     >>> while True:
     ...     action = policy.pull(range(env.action_space.n))
     ...     observation, reward, terminated, truncated, info = env.step(action)
-    ...     policy = policy.update(action, reward)
-    ...     metric = metric.update(reward)
+    ...     policy.update(action, reward)
+    ...     metric.update(reward)
     ...     if terminated or truncated:
     ...         break
 
@@ -54,7 +54,7 @@ class BayesUCB(bandit.base.Policy):
     Sum: 841.
 
     Reference
-    --------
+    ---------
     [^1]: [Kaufmann, Emilie, Olivier Cappé, and Aurélien Garivier. "On Bayesian upper confidence bounds for bandit problems." Artificial intelligence and statistics. PMLR, 2012.](http://proceedings.mlr.press/v22/kaufmann12/kaufmann12.pdf)
 
     """
@@ -86,4 +86,3 @@ class BayesUCB(bandit.base.Policy):
         super().update(arm_id, *reward_args, **reward_kwargs)
         reward = reward_args[0]
         self._posteriors[arm_id].update(reward)
-        return self

@@ -48,7 +48,7 @@ class BayesianLinearRegression(base.Regressor):
     43.852...
 
     >>> model.predict_one(x, with_dist=True)
-    𝒩(μ=43.853, σ=1.003)
+    𝒩(μ=43.85..., σ=1.00...)
 
     The `smoothing` parameter can be set to make the model robust to drift. The parameter is
     expected to be between 0 and 1. To exemplify, let's generate some simulation data with an
@@ -193,8 +193,6 @@ class BayesianLinearRegression(base.Regressor):
             ss_arr = new_ss_arr
 
         self._set_arrays(x.keys(), m_arr, ss_arr, ss_inv_arr)
-
-        return self
 
     def predict_one(self, x, with_dist=False):
         """Predict the output of features `x`.

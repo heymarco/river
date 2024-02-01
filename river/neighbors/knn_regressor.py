@@ -96,16 +96,12 @@ class KNNRegressor(base.Regressor):
         """
         if method not in {self._MEAN, self._MEDIAN, self._WEIGHTED_MEAN}:
             raise ValueError(
-                "Invalid aggregation_method: {}.\n"
-                "Valid options are: {}".format(
-                    method, {self._MEAN, self._MEDIAN, self._WEIGHTED_MEAN}
-                )
+                f"Invalid aggregation_method: {method}.\n"
+                f"Valid options are: {(self._MEAN, self._MEDIAN, self._WEIGHTED_MEAN)}"
             )
 
     def learn_one(self, x, y):
         self._nn.append((x, y))
-
-        return self
 
     def predict_one(self, x, **kwargs):
         # Find the nearest neighbors!

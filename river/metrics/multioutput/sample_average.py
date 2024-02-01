@@ -34,7 +34,8 @@ class SampleAverage(MultiOutputMetric, metrics.base.WrapperMetric):
     >>> sample_jaccard = metrics.multioutput.SampleAverage(metrics.Jaccard())
 
     >>> for yt, yp in zip(y_true, y_pred):
-    ...     sample_jaccard = sample_jaccard.update(yt, yp)
+    ...     sample_jaccard.update(yt, yp)
+
     >>> sample_jaccard
     SampleAverage(Jaccard): 58.33%
 
@@ -53,19 +54,17 @@ class SampleAverage(MultiOutputMetric, metrics.base.WrapperMetric):
             return utils.inspect.ismoclassifier(model)
         return utils.inspect.ismoregressor(model)
 
-    def update(self, y_true, y_pred, sample_weight=1.0):
+    def update(self, y_true, y_pred, w=1.0):
         metric = self.metric.clone()
         for i in y_true:
             metric.update(y_true[i], y_pred[i])
-        self._avg.update(metric.get(), sample_weight)
-        return self
+        self._avg.update(metric.get(), w)
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
+    def revert(self, y_true, y_pred, w=1.0):
         metric = self.metric.clone()
         for i in y_true:
             metric.update(y_true[i], y_pred[i])
-        self._avg.revert(metric.get(), sample_weight)
-        return self
+        self._avg.revert(metric.get(), w)
 
     def get(self):
         return self._avg.get()

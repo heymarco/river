@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+from sklearn import datasets as sk_datasets
+from sklearn import linear_model as sk_linear_model
 
-from river import compose, datasets, preprocessing, stream
+from river import compat, compose, datasets, preprocessing, stream
 
 
 def test_issue_1238():
@@ -46,7 +49,7 @@ def test_issue_1243():
     >>> group1 = compose.Select('z')
     >>> group2 = compose.Select('x') | preprocessing.StandardScaler()
     >>> model = group1 + group2 + group1 * group2
-    >>> model = model.learn_many(X)
+    >>> model.learn_many(X)
     >>> for x in X.to_dict('records'):
     ...     print(model.transform_one(x))
     {'z*x': 0.785..., 'x': 0.785..., 'z': 1}
@@ -200,3 +203,21 @@ def test_one_many_consistent():
 
     # check_dtype=False to avoid int/float comparison
     pd.testing.assert_frame_equal(many_outputs[one_outputs.columns], one_outputs, check_dtype=False)
+
+
+def test_issue_1310():
+    X, y = sk_datasets.make_regression(n_samples=5000, n_features=2)
+    X = pd.DataFrame(X)
+    X.columns = ["feat_1", "feat_2"]
+    X["cat"] = np.random.randint(1, 100, X.shape[0])
+    X["cat"] = X["cat"].astype("string")
+    y = pd.Series(y)
+
+    group1 = compose.Select("cat") | preprocessing.OneHotEncoder()
+    group2 = compose.Select("feat_2") | preprocessing.StandardScaler()
+    model = group1 + group1 * group2 * group2 | compat.convert_sklearn_to_river(
+        sk_linear_model.SGDRegressor()
+    )
+
+    model.predict_many(X)
+    model.learn_many(X, y)

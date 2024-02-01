@@ -3,10 +3,10 @@ from __future__ import annotations
 import functools
 from collections import defaultdict
 
-from river import utils
+from river import metrics, utils
 
 
-class ConfusionMatrix:
+class ConfusionMatrix(metrics.base.MultiClassMetric):
     """Confusion Matrix for binary and multi-class classification.
 
     Parameters
@@ -25,7 +25,7 @@ class ConfusionMatrix:
     >>> cm = metrics.ConfusionMatrix()
 
     >>> for yt, yp in zip(y_true, y_pred):
-    ...     cm = cm.update(yt, yp)
+    ...     cm.update(yt, yp)
 
     >>> cm
            ant  bird   cat
@@ -62,22 +62,20 @@ class ConfusionMatrix:
         """Syntactic sugar for accessing the counts directly."""
         return self.data[key]
 
-    def update(self, y_true, y_pred, sample_weight=1.0):
+    def update(self, y_true, y_pred, w=1.0):
         self.n_samples += 1
-        self._update(y_true, y_pred, sample_weight)
-        return self
+        self._update(y_true, y_pred, w)
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
+    def revert(self, y_true, y_pred, w=1.0):
         self.n_samples -= 1
-        # Revert is equal to subtracting so we pass the negative sample_weight
-        self._update(y_true, y_pred, -sample_weight)
-        return self
+        # Revert is equal to subtracting so we pass the negative sample_weight (w)
+        self._update(y_true, y_pred, -w)
 
-    def _update(self, y_true, y_pred, sample_weight):
-        self.data[y_true][y_pred] += sample_weight
-        self.total_weight += sample_weight
-        self.sum_row[y_true] += sample_weight
-        self.sum_col[y_pred] += sample_weight
+    def _update(self, y_true, y_pred, w):
+        self.data[y_true][y_pred] += w
+        self.total_weight += w
+        self.sum_row[y_true] += w
+        self.sum_col[y_pred] += w
 
     @property
     def classes(self):
@@ -127,3 +125,10 @@ class ConfusionMatrix:
     @property
     def total_false_negatives(self):
         return sum(self.false_negatives(label) for label in self.classes)
+
+    @property
+    def bigger_is_better(self):
+        raise NotImplementedError
+
+    def get(self):
+        raise NotImplementedError

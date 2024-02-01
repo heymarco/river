@@ -1,5 +1,3 @@
 from __future__ import annotations
 
-VERSION = (0, 18, 0)
-
-__version__ = ".".join(map(str, VERSION))  # noqa: F401
+__version__ = "0.21.0"

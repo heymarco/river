@@ -7,8 +7,6 @@ import operator
 
 from river import base, stats, utils
 
-from . import confusion
-
 __all__ = [
     "BinaryMetric",
     "ClassificationMetric",
@@ -79,26 +77,31 @@ class ClassificationMetric(Metric):
 
     _fmt = ".2%"  # output a percentage, e.g. 0.427 becomes "42,7%"
 
-    def __init__(self, cm: confusion.ConfusionMatrix | None = None):
+    def __init__(self, cm=None):
+        # HACK: there is a circular dependency between ConfusionMatrix and ClassificationMetric. We
+        # use ConfusionMatrix here so as to express metrics in terms of false/true
+        # positives/negatives. But for UX reasons, we also want ConfusionMatrix to be a
+        # ClassificationMetric, so that it can used in places a ClassificationMetric can be used,
+        # such as evaluate.progressive_val_score.
+        from river import metrics
+
         if cm is None:
-            cm = confusion.ConfusionMatrix()
+            cm = metrics.ConfusionMatrix()
         self.cm = cm
 
-    def update(self, y_true, y_pred, sample_weight=1.0):
+    def update(self, y_true, y_pred, w=1.0):
         self.cm.update(
             y_true,
             y_pred,
-            sample_weight=sample_weight,
+            w=w,
         )
-        return self
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
+    def revert(self, y_true, y_pred, w=1.0):
         self.cm.revert(
             y_true,
             y_pred,
-            sample_weight=sample_weight,
+            w=w,
         )
-        return self
 
     @property
     def bigger_is_better(self):
@@ -148,21 +151,21 @@ class BinaryMetric(ClassificationMetric):
         self,
         y_true: bool,
         y_pred: bool | float | dict[bool, float],
-        sample_weight=1.0,
+        w=1.0,
     ) -> BinaryMetric:
         if self.requires_labels:
             y_pred = y_pred == self.pos_val
-        return super().update(y_true == self.pos_val, y_pred, sample_weight)
+        return super().update(y_true == self.pos_val, y_pred, w)
 
     def revert(
         self,
         y_true: bool,
         y_pred: bool | float | dict[bool, float],
-        sample_weight=1.0,
+        w=1.0,
     ) -> BinaryMetric:
         if self.requires_labels:
             y_pred = y_pred == self.pos_val
-        return super().revert(y_true == self.pos_val, y_pred, sample_weight)
+        return super().revert(y_true == self.pos_val, y_pred, w)
 
 
 class MultiClassMetric(ClassificationMetric):
@@ -187,11 +190,15 @@ class RegressionMetric(Metric):
     _fmt = ",.6f"  # use commas to separate big numbers and show 6 decimals
 
     @abc.abstractmethod
-    def update(self, y_true: numbers.Number, y_pred: numbers.Number) -> RegressionMetric:
+    def update(
+        self, y_true: numbers.Number, y_pred: numbers.Number
+    ) -> RegressionMetric:
         """Update the metric."""
 
     @abc.abstractmethod
-    def revert(self, y_true: numbers.Number, y_pred: numbers.Number) -> RegressionMetric:
+    def revert(
+        self, y_true: numbers.Number, y_pred: numbers.Number
+    ) -> RegressionMetric:
         """Revert the metric."""
 
     @property
@@ -220,11 +227,11 @@ class Metrics(Metric, collections.UserList):
 
     """
 
-    def __init__(self, metrics, str_sep=", "):
+    def __init__(self, metrics, str_sep="\n"):
         super().__init__(metrics)
         self.str_sep = str_sep
 
-    def update(self, y_true, y_pred, sample_weight=1.0):
+    def update(self, y_true, y_pred, w=1.0):
         # If the metrics are classification metrics, then we have to handle the case where some
         # of the metrics require labels, whilst others need to be fed probabilities
         if hasattr(self, "requires_labels") and not self.requires_labels:
@@ -233,26 +240,24 @@ class Metrics(Metric, collections.UserList):
                     m.update(y_true, max(y_pred, key=y_pred.get))
                 else:
                     m.update(y_true, y_pred)
-            return self
+            return
 
         for m in self:
             m.update(y_true, y_pred)
-        return self
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
+    def revert(self, y_true, y_pred, w=1.0):
         # If the metrics are classification metrics, then we have to handle the case where some
         # of the metrics require labels, whilst others need to be fed probabilities
         if hasattr(self, "requires_labels") and not self.requires_labels:
             for m in self:
                 if m.requires_labels:
-                    m.revert(y_true, max(y_pred, key=y_pred.get), sample_weight)
+                    m.revert(y_true, max(y_pred, key=y_pred.get), w)
                 else:
-                    m.revert(y_true, y_pred, sample_weight)
-            return self
+                    m.revert(y_true, y_pred, w)
+            return
 
         for m in self:
-            m.revert(y_true, y_pred, sample_weight)
-        return self
+            m.revert(y_true, y_pred, w)
 
     def get(self):
         return [m.get() for m in self]
@@ -317,7 +322,11 @@ class WrapperMetric(Metric):
 
     def __repr__(self):
         name = self.__class__.__name__
-        return super().__repr__().replace(name, f"{name}({self.metric.__class__.__name__})")
+        return (
+            super()
+            .__repr__()
+            .replace(name, f"{name}({self.metric.__class__.__name__})")
+        )
 
 
 class MeanMetric(abc.ABC):
@@ -333,13 +342,11 @@ class MeanMetric(abc.ABC):
     def _eval(self, y_true, y_pred):
         pass
 
-    def update(self, y_true, y_pred, sample_weight=1.0):
-        self._mean.update(x=self._eval(y_true, y_pred), w=sample_weight)
-        return self
+    def update(self, y_true, y_pred, w=1.0):
+        self._mean.update(x=self._eval(y_true, y_pred), w=w)
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
-        self._mean.revert(x=self._eval(y_true, y_pred), w=sample_weight)
-        return self
+    def revert(self, y_true, y_pred, w=1.0):
+        self._mean.revert(x=self._eval(y_true, y_pred), w=w)
 
     def get(self):
         return self._mean.get()
@@ -354,11 +361,11 @@ class ClusteringMetric(base.Base, abc.ABC):
     _fmt = ",.6f"  # Use commas to separate big numbers and show 6 decimals
 
     @abc.abstractmethod
-    def update(self, x, y_pred, centers, sample_weight=1.0) -> ClusteringMetric:
+    def update(self, x, y_pred, centers, w=1.0) -> ClusteringMetric:
         """Update the metric."""
 
     @abc.abstractmethod
-    def revert(self, x, y_pred, centers, sample_weight=1.0) -> ClusteringMetric:
+    def revert(self, x, y_pred, centers, w=1.0) -> ClusteringMetric:
         """Revert the metric."""
 
     @abc.abstractmethod

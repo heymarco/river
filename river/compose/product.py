@@ -92,17 +92,36 @@ class TransformerProduct(union.TransformerUnion):
             # Fast-track for sparse[uint8] * sparse[uint8]
             if a.dtype == pd.SparseDtype("uint8") and b.dtype == pd.SparseDtype("uint8"):
                 return a & b
+            # Fast-track for sparse[uint8] * numeric
+            if a.dtype == pd.SparseDtype("uint8"):
+                c = np.zeros_like(b)
+                true_mask = a.eq(1)
+                c[true_mask] = b[true_mask]
+                return pd.Series(
+                    c,
+                    index=b.index,
+                    dtype=pd.SparseDtype(b.dtype, fill_value=0),
+                )
+            # Fast-track for numeric * sparse[uint8]
+            if b.dtype == pd.SparseDtype("uint8"):
+                return multiply(b, a)
             # Fast-track for sparse * sparse
-            if pd.api.types.is_sparse(a) and pd.api.types.is_sparse(b):
-                return pd.arrays.SparseArray(
-                    a * b, fill_value=a.sparse.fill_value * b.sparse.fill_value
+            if isinstance(a.dtype, pd.SparseDtype) and isinstance(b.dtype, pd.SparseDtype):
+                return pd.Series(
+                    a * b,
+                    index=a.index,
+                    dtype=pd.SparseDtype(
+                        b.dtype, fill_value=a.sparse.fill_value * b.sparse.fill_value
+                    ),
                 )
             # Fast-track for sparse * numeric
-            if pd.api.types.is_sparse(a):
-                return pd.arrays.SparseArray(a * b, fill_value=a.sparse.fill_value)
+            if isinstance(a.dtype, pd.SparseDtype):
+                return pd.Series(
+                    a * b, dtype=pd.SparseDtype(fill_value=a.sparse.fill_value, dtype=b.dtype)
+                )
             # Fast-track for numeric * sparse
-            if pd.api.types.is_sparse(b):
-                return pd.arrays.SparseArray(a * b, fill_value=b.sparse.fill_value)
+            if isinstance(b.dtype, pd.SparseDtype):
+                return multiply(b, a)
             # Default
             return np.multiply(a, b)
 

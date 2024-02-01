@@ -19,11 +19,14 @@ def _progressive_validation(
     delay: str | int | dt.timedelta | typing.Callable | None = None,
     measure_time=False,
     measure_memory=False,
-    timeout: int | None = None
+    yield_predictions=False,
+    timeout: int | None = None,
 ):
     # Check that the model and the metric are in accordance
     if not metric.works_with(model):
-        raise ValueError(f"{metric.__class__.__name__} metric is not compatible with {model}")
+        raise ValueError(
+            f"{metric.__class__.__name__} metric is not compatible with {model}"
+        )
 
     # Determine if predict_one or predict_proba_one should be used in case of a classifier
     if utils.inspect.isanomalydetector(model) or utils.inspect.isanomalyfilter(model):
@@ -46,7 +49,7 @@ def _progressive_validation(
     if measure_time:
         start = time.perf_counter()
 
-    def report():
+    def report(y_pred):
         if isinstance(metric, metrics.base.Metrics):
             state = {m.__class__.__name__: m for m in metric}
         else:
@@ -59,6 +62,9 @@ def _progressive_validation(
             state["Time"] = dt.timedelta(seconds=now - start)
         if measure_memory:
             state["Memory"] = model._raw_memory_usage
+        if yield_predictions:
+            state["Prediction"] = y_pred
+
         return state
 
     start_time = time.process_time()
@@ -93,7 +99,7 @@ def _progressive_validation(
         # Yield current results
         n_total_answers += 1
         if n_total_answers == next_checkpoint:
-            yield report()
+            yield report(y_pred=y_pred)
             prev_checkpoint = next_checkpoint
             next_checkpoint = next(checkpoints, None)
 
@@ -104,7 +110,7 @@ def _progressive_validation(
     else:
         # If the dataset was exhausted, we need to make sure that we yield the final results
         if prev_checkpoint and n_total_answers != prev_checkpoint:
-            yield report()
+            yield report(y_pred=None)
 
 
 def iter_progressive_val_score(
@@ -116,7 +122,8 @@ def iter_progressive_val_score(
     step=1,
     measure_time=False,
     measure_memory=False,
-    timeout: int | None = None
+    yield_predictions=False,
+    timeout: int | None = None,
 ) -> typing.Generator:
     """Evaluates the performance of a model on a streaming dataset and yields results.
 
@@ -152,6 +159,9 @@ def iter_progressive_val_score(
         Whether or not to measure the elapsed time.
     measure_memory
         Whether or not to measure the memory usage of the model.
+    yield_predictions
+        Whether or not to include predictions. If step is 1, then this is equivalent to yielding
+        the predictions at every iterations. Otherwise, not all predictions will be yielded.
     timeout
         Maximum process time before report is yielded and execution terminates
 
@@ -191,6 +201,26 @@ def iter_progressive_val_score(
     {'ROCAUC': ROCAUC: 95.07%, 'Step': 1200}
     {'ROCAUC': ROCAUC: 95.07%, 'Step': 1250}
 
+    The `yield_predictions` parameter can be used to include the predictions in the results:
+
+    >>> import itertools
+
+    >>> steps = evaluate.iter_progressive_val_score(
+    ...     model=model,
+    ...     dataset=datasets.Phishing(),
+    ...     metric=metrics.ROCAUC(),
+    ...     step=1,
+    ...     yield_predictions=True
+    ... )
+
+    >>> for step in itertools.islice(steps, 100, 105):
+    ...    print(step)
+    {'ROCAUC': ROCAUC: 94.68%, 'Step': 101, 'Prediction': {False: 0.966..., True: 0.033...}}
+    {'ROCAUC': ROCAUC: 94.75%, 'Step': 102, 'Prediction': {False: 0.035..., True: 0.964...}}
+    {'ROCAUC': ROCAUC: 94.82%, 'Step': 103, 'Prediction': {False: 0.043..., True: 0.956...}}
+    {'ROCAUC': ROCAUC: 94.89%, 'Step': 104, 'Prediction': {False: 0.816..., True: 0.183...}}
+    {'ROCAUC': ROCAUC: 94.96%, 'Step': 105, 'Prediction': {False: 0.041..., True: 0.958...}}
+
     References
     ----------
     [^1]: [Beating the Hold-Out: Bounds for K-fold and Progressive Cross-Validation](http://hunch.net/~jl/projects/prediction_bounds/progressive_validation/coltfinal.pdf)
@@ -207,7 +237,8 @@ def iter_progressive_val_score(
         delay=delay,
         measure_time=measure_time,
         measure_memory=measure_memory,
-        timeout=timeout
+        yield_predictions=yield_predictions,
+        timeout=timeout,
     )
 
 
@@ -321,8 +352,8 @@ def progressive_val_score(
 
     >>> for x, y in datasets.Phishing():
     ...     y_pred = model.predict_proba_one(x)
-    ...     metric = metric.update(y, y_pred)
-    ...     model = model.learn_one(x, y)
+    ...     metric.update(y, y_pred)
+    ...     model.learn_one(x, y)
 
     >>> metric
     ROCAUC: 95.07%

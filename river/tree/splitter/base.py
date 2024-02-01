@@ -21,7 +21,7 @@ class Splitter(base.Estimator, abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, att_val, target_val: base.typing.Target, sample_weight: float):
+    def update(self, att_val, target_val: base.typing.Target, w: float):
         """Update statistics of this observer given an attribute value, its target value
         and the weight of the instance observed.
 
@@ -31,8 +31,9 @@ class Splitter(base.Estimator, abc.ABC):
             The value of the monitored attribute.
         target_val
             The target value.
-        sample_weight
+        w
             The weight of the instance.
+
         """
 
     @abc.abstractmethod
@@ -49,6 +50,7 @@ class Splitter(base.Estimator, abc.ABC):
         Returns
         -------
             Probability for an attribute value given a class.
+
         """
 
     @abc.abstractmethod

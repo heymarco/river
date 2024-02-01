@@ -53,7 +53,7 @@ class HDDM_W(base.BinaryDriftAndWarningDetector):
     >>> print_warning = True
     >>> # Update drift detector and verify if change is detected
     >>> for i, x in enumerate(data_stream):
-    ...     _ = hddm_w.update(x)
+    ...     hddm_w.update(x)
     ...     if hddm_w.warning_detected and print_warning:
     ...         print(f"Warning detected at index {i}")
     ...         print_warning = False
@@ -123,11 +123,14 @@ class HDDM_W(base.BinaryDriftAndWarningDetector):
 
         self._update_incr_stats(x, self.drift_confidence)
         if self._detect_mean_incr(self.drift_confidence):
+            self._warning_detected = False
             self._drift_detected = True
         elif self._detect_mean_incr(self.warning_confidence):
             self._warning_detected = True
+            self._drift_detected = False
         else:
             self._warning_detected = False
+            self._drift_detected = False
 
         self._update_decr_stats(x, self.drift_confidence)
         if self.two_sided_test:
@@ -135,8 +138,6 @@ class HDDM_W(base.BinaryDriftAndWarningDetector):
                 self._drift_detected = True
             elif self._detect_mean_decr(self.warning_confidence):
                 self._warning_detected = True
-
-        return self
 
     def _has_mean_changed(
         self, sample1: SampleInfo, sample2: SampleInfo, confidence: float

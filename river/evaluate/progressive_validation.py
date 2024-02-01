@@ -97,12 +97,9 @@ def _progressive_validation(
             prev_checkpoint = next_checkpoint
             next_checkpoint = next(checkpoints, None)
 
-        if timeout:
-            current_time = time.process_time()
-            if current_time - start_time > timeout:
-                # If the dataset was exhausted, we need to make sure that we yield the final results
-                if prev_checkpoint and n_total_answers != prev_checkpoint:
-                    yield report()
+            if timeout:
+                current_time = time.process_time()
+                if current_time - start_time > timeout:
                     break
     else:
         # If the dataset was exhausted, we need to make sure that we yield the final results

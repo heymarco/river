@@ -47,7 +47,7 @@ def _progressive_validation(
     next_checkpoint = next(checkpoints, None)
     n_total_answers = 0
     if measure_time:
-        start = time.perf_counter()
+        start = time.process_time()
 
     def report(y_pred):
         if isinstance(metric, metrics.base.Metrics):
@@ -58,7 +58,7 @@ def _progressive_validation(
         if active_learning:
             state["Samples used"] = n_samples_learned
         if measure_time:
-            now = time.perf_counter()
+            now = time.process_time()
             state["Time"] = dt.timedelta(seconds=now - start)
         if measure_memory:
             state["Memory"] = model._raw_memory_usage
@@ -66,8 +66,6 @@ def _progressive_validation(
             state["Prediction"] = y_pred
 
         return state
-
-    start_time = time.process_time()
 
     for i, x, y, *kwargs in stream.simulate_qa(dataset, moment, delay, copy=True):
         kwargs = kwargs[0] if kwargs else {}
@@ -105,7 +103,7 @@ def _progressive_validation(
 
             if timeout:
                 current_time = time.process_time()
-                if current_time - start_time > timeout:
+                if current_time - start > timeout:
                     break
     else:
         # If the dataset was exhausted, we need to make sure that we yield the final results

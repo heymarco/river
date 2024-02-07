@@ -89,11 +89,12 @@ class AdwinRolling(BaseRolling):
     Classification metric wrapper that computes the metric in a sliding window whose size is controlled by Adwin (Adaptive windowing)
     Window size is only reduced when accuracy decreases, not during stable or increasing periods.
     """
-    def __init__(self, obj: Rollable, adwin, min_window_size=50):
+    def __init__(self, obj: Rollable, adwin, min_window_size=50, max_window_size=1000):
         super().__init__(obj)
         self.window: collections.deque = collections.deque()
         self.adwin = adwin
         self.min_window_size = min_window_size
+        self.max_window_size = max_window_size
         self.current_window_size = min_window_size
         self.prev_estimate = 0.0
 
@@ -112,7 +113,7 @@ class AdwinRolling(BaseRolling):
             self.current_window_size = self.adwin.width
         else:
             self.current_window_size = max(self.adwin.width, self.current_window_size)
-        if len(self.window) >= max(self.min_window_size, self.current_window_size):
+        if len(self.window) >= min(self.max_window_size, max(self.min_window_size, self.current_window_size)):
             while len(self.window) >= self.adwin.width:
                 self.obj.revert(*self.window.popleft())
                 # self.obj.revert(*self.window[0][0], **self.window[0][1])

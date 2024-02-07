@@ -5,8 +5,6 @@ import collections
 import datetime as dt
 import typing
 
-from ..drift import ADWIN
-
 
 @typing.runtime_checkable
 class Rollable(typing.Protocol):

@@ -108,15 +108,10 @@ class AdwinRolling(BaseRolling):
     def _update(self, y_true, y_pred, w=1.0):
         self.prev_estimate = self.adwin.estimation
         self.adwin.update(y_true == y_pred)
-        current_estimate = self.adwin.estimation
-        if self.adwin.drift_detected and current_estimate < self.prev_estimate:
-            self.current_window_size = self.adwin.width
-        else:
-            self.current_window_size = max(self.adwin.width, self.current_window_size)
-        if len(self.window) >= min(self.max_window_size, max(self.min_window_size, self.current_window_size)):
-            while len(self.window) >= self.adwin.width:
+        ws = min(self.max_window_size, max(self.min_window_size, self.adwin.width))
+        if len(self.window) >= ws:
+            while len(self.window) >= ws:
                 self.obj.revert(*self.window.popleft())
-                # self.obj.revert(*self.window[0][0], **self.window[0][1])
         self.obj.update(y_true, y_pred, w)
         self.window.append((y_true, y_pred, w))
 

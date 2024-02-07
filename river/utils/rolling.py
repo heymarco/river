@@ -5,6 +5,8 @@ import collections
 import datetime as dt
 import typing
 
+from river.drift import ADWIN
+
 
 @typing.runtime_checkable
 class Rollable(typing.Protocol):
@@ -82,6 +84,26 @@ class Rolling(BaseRolling):
             self.obj.revert(*self.window[0][0], **self.window[0][1])
         self.obj.update(*args, **kwargs)
         self.window.append((args, kwargs))
+
+
+class AdwinRolling(BaseRolling):
+    def __init__(self, obj: Rollable, delta=0.01):
+        super().__init__(obj)
+        self.window: collections.deque = collections.deque()
+        self.adwin = ADWIN(delta=delta)
+
+    @property
+    def window_size(self):
+        return self.window.maxlen
+
+    def update(self, y_true, y_pred, w=1.0):
+        self.adwin.update(y_true == y_pred)
+        if len(self.window) >= self.adwin.width:
+            while len(self.window) >= self.adwin.width:
+                self.obj.revert(*self.window.popleft())
+                # self.obj.revert(*self.window[0][0], **self.window[0][1])
+        self.obj.update(y_true, y_pred, w)
+        self.window.append((y_true, y_pred, w))
 
 
 class TimeRolling(BaseRolling):

@@ -5,7 +5,7 @@ import collections
 import datetime as dt
 import typing
 
-from river.drift import ADWIN
+from ..drift import ADWIN
 
 
 @typing.runtime_checkable
@@ -87,18 +87,34 @@ class Rolling(BaseRolling):
 
 
 class AdwinRolling(BaseRolling):
-    def __init__(self, obj: Rollable, delta=0.01):
+    """
+    Classification metric wrapper that computes the metric in a sliding window whose size is controlled by Adwin (Adaptive windowing)
+    Window size is only reduced when accuracy decreases, not during stable or increasing periods.
+    """
+    def __init__(self, obj: Rollable, adwin, min_window_size=50):
         super().__init__(obj)
         self.window: collections.deque = collections.deque()
-        self.adwin = ADWIN(delta=delta)
+        self.adwin = adwin
+        self.min_window_size = min_window_size
+        self.current_window_size = min_window_size
+        self.prev_estimate = 0.0
 
     @property
     def window_size(self):
         return self.window.maxlen
 
-    def update(self, y_true, y_pred, w=1.0):
+    def update(self, *args, **kwargs):
+        self._update(*args, **kwargs)
+
+    def _update(self, y_true, y_pred, w=1.0):
+        self.prev_estimate = self.adwin.estimation
         self.adwin.update(y_true == y_pred)
-        if len(self.window) >= self.adwin.width:
+        current_estimate = self.adwin.estimation
+        if self.adwin.drift_detected and current_estimate < self.prev_estimate:
+            self.current_window_size = self.adwin.width
+        else:
+            self.current_window_size = max(self.adwin.width, self.current_window_size)
+        if len(self.window) >= max(self.min_window_size, self.current_window_size):
             while len(self.window) >= self.adwin.width:
                 self.obj.revert(*self.window.popleft())
                 # self.obj.revert(*self.window[0][0], **self.window[0][1])
